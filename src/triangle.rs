@@ -300,6 +300,7 @@ fn render<'a>(
             pipeline.render_pass(encoder)
         } else {
             encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                multiview_mask: None,
                 label: Some("iced_wgpu.triangle.render_pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                     view: target,
@@ -730,8 +731,8 @@ mod solid {
             let layout = device.create_pipeline_layout(
                 &wgpu::PipelineLayoutDescriptor {
                     label: Some("iced_wgpu.triangle.solid.pipeline_layout"),
-                    bind_group_layouts: &[&constants_layout],
-                    push_constant_ranges: &[],
+                    bind_group_layouts: &[Some(&constants_layout)],
+                    immediate_size: 0,
                 },
             );
 
@@ -757,7 +758,7 @@ mod solid {
                         vertex: wgpu::VertexState {
                             module: &shader,
                             entry_point: Some("solid_vs_main"),
-                            buffers: &[wgpu::VertexBufferLayout {
+                            buffers: &[Some(wgpu::VertexBufferLayout {
                                 array_stride: std::mem::size_of::<
                                     mesh::SolidVertex2D,
                                 >(
@@ -770,7 +771,7 @@ mod solid {
                                     // Color
                                     1 => Float32x4,
                                 ),
-                            }],
+                            })],
                             compilation_options:
                                 wgpu::PipelineCompilationOptions::default(),
                         },
@@ -784,7 +785,7 @@ mod solid {
                         primitive: triangle::primitive_state(),
                         depth_stencil: None,
                         multisample: triangle::multisample_state(antialiasing),
-                        multiview: None,
+                        multiview_mask: None,
                         cache: None,
                     },
                 );
@@ -885,8 +886,8 @@ mod gradient {
             let layout = device.create_pipeline_layout(
                 &wgpu::PipelineLayoutDescriptor {
                     label: Some("iced_wgpu.triangle.gradient.pipeline_layout"),
-                    bind_group_layouts: &[&constants_layout],
-                    push_constant_ranges: &[],
+                    bind_group_layouts: &[Some(&constants_layout)],
+                    immediate_size: 0,
                 },
             );
 
@@ -913,7 +914,7 @@ mod gradient {
                     vertex: wgpu::VertexState {
                         module: &shader,
                         entry_point: Some("gradient_vs_main"),
-                        buffers: &[wgpu::VertexBufferLayout {
+                        buffers: &[Some(wgpu::VertexBufferLayout {
                             array_stride: std::mem::size_of::<
                                 mesh::GradientVertex2D,
                             >()
@@ -935,7 +936,7 @@ mod gradient {
                                 // Direction
                                 6 => Float32x4
                             ),
-                        }],
+                        })],
                         compilation_options:
                             wgpu::PipelineCompilationOptions::default(),
                     },
@@ -949,7 +950,7 @@ mod gradient {
                     primitive: triangle::primitive_state(),
                     depth_stencil: None,
                     multisample: triangle::multisample_state(antialiasing),
-                    multiview: None,
+                    multiview_mask: None,
                     cache: None,
                 },
             );

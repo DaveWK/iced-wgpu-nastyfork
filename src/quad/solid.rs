@@ -65,8 +65,8 @@ impl Pipeline {
         let layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("iced_wgpu.quad.solid.pipeline"),
-                push_constant_ranges: &[],
-                bind_group_layouts: &[constants_layout],
+                immediate_size: 0,
+                bind_group_layouts: &[Some(constants_layout)],
             });
 
         let shader =
@@ -92,7 +92,7 @@ impl Pipeline {
                 vertex: wgpu::VertexState {
                     module: &shader,
                     entry_point: Some("solid_vs_main"),
-                    buffers: &[wgpu::VertexBufferLayout {
+                    buffers: &[Some(wgpu::VertexBufferLayout {
                         array_stride: std::mem::size_of::<Solid>() as u64,
                         step_mode: wgpu::VertexStepMode::Instance,
                         attributes: &wgpu::vertex_attr_array!(
@@ -117,7 +117,7 @@ impl Pipeline {
                             // Snap
                             9 => Uint32,
                         ),
-                    }],
+                    })],
                     compilation_options:
                         wgpu::PipelineCompilationOptions::default(),
                 },
@@ -139,7 +139,7 @@ impl Pipeline {
                     mask: !0,
                     alpha_to_coverage_enabled: false,
                 },
-                multiview: None,
+                multiview_mask: None,
                 cache: None,
             });
 

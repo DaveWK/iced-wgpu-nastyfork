@@ -98,8 +98,11 @@ pub fn convert(
     let pipeline_layout =
         device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("iced_wgpu.offscreen.blit.pipeline_layout"),
-            bind_group_layouts: &[&constant_layout, &texture_layout],
-            push_constant_ranges: &[],
+            bind_group_layouts: &[
+                Some(&constant_layout),
+                Some(&texture_layout),
+            ],
+            immediate_size: 0,
         });
 
     let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
@@ -149,7 +152,7 @@ pub fn convert(
             },
             depth_stencil: None,
             multisample: wgpu::MultisampleState::default(),
-            multiview: None,
+            multiview_mask: None,
             cache: None,
         });
 
@@ -181,6 +184,7 @@ pub fn convert(
         });
 
     let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+        multiview_mask: None,
         label: Some("iced_wgpu.offscreen.blit.render_pass"),
         color_attachments: &[Some(wgpu::RenderPassColorAttachment {
             view,

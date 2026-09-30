@@ -75,8 +75,8 @@ impl Pipeline {
             let layout = device.create_pipeline_layout(
                 &wgpu::PipelineLayoutDescriptor {
                     label: Some("iced_wgpu.quad.gradient.pipeline"),
-                    push_constant_ranges: &[],
-                    bind_group_layouts: &[constants_layout],
+                    immediate_size: 0,
+                    bind_group_layouts: &[Some(constants_layout)],
                 },
             );
 
@@ -105,7 +105,7 @@ impl Pipeline {
                     vertex: wgpu::VertexState {
                         module: &shader,
                         entry_point: Some("gradient_vs_main"),
-                        buffers: &[wgpu::VertexBufferLayout {
+                        buffers: &[Some(wgpu::VertexBufferLayout {
                             array_stride: std::mem::size_of::<Gradient>()
                                 as u64,
                             step_mode: wgpu::VertexStepMode::Instance,
@@ -133,7 +133,7 @@ impl Pipeline {
                                 // Snap
                                 10 => Uint32,
                             ),
-                        }],
+                        })],
                         compilation_options:
                             wgpu::PipelineCompilationOptions::default(),
                     },
@@ -155,7 +155,7 @@ impl Pipeline {
                         mask: !0,
                         alpha_to_coverage_enabled: false,
                     },
-                    multiview: None,
+                    multiview_mask: None,
                     cache: None,
                 },
             );

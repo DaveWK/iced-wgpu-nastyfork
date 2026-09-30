@@ -7,6 +7,25 @@ use crate::graphics::{self, Shell, Viewport};
 use crate::settings::{self, Settings};
 use crate::{Engine, Renderer};
 
+// Keep the display connection alive without imposing a new Debug bound on
+// Iced's public Window trait.
+#[cfg(not(target_arch = "wasm32"))]
+struct WindowDisplay<W>(std::sync::Arc<W>);
+#[cfg(not(target_arch = "wasm32"))]
+impl<W> std::fmt::Debug for WindowDisplay<W> {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str("WindowDisplay")
+    }
+}
+#[cfg(not(target_arch = "wasm32"))]
+impl<W: compositor::Window> wgpu::rwh::HasDisplayHandle for WindowDisplay<W> {
+    fn display_handle(
+        &self,
+    ) -> Result<wgpu::rwh::DisplayHandle<'_>, wgpu::rwh::HandleError> {
+        self.0.display_handle()
+    }
+}
+
 /// A window graphics backend for iced powered by `wgpu`.
 pub struct Compositor {
     instance: wgpu::Instance,
@@ -52,15 +71,27 @@ impl Compositor {
         compatible_window: Option<W>,
         shell: Shell,
     ) -> Result<Self, Error> {
+        let compatible_window = compatible_window.map(std::sync::Arc::new);
+        #[cfg(not(target_arch = "wasm32"))]
+        let descriptor = match &compatible_window {
+            Some(window) => wgpu::InstanceDescriptor::new_with_display_handle(
+                Box::new(WindowDisplay(window.clone())),
+            ),
+            None => wgpu::InstanceDescriptor::new_without_display_handle(),
+        };
+        // Browser canvas surfaces do not use a native display connection.
+        // wgpu's owned display trait is Send + Sync even on wasm.
+        #[cfg(target_arch = "wasm32")]
+        let descriptor = wgpu::InstanceDescriptor::new_without_display_handle();
         let instance = wgpu::util::new_instance_with_webgpu_detection(
-            &wgpu::InstanceDescriptor {
+            wgpu::InstanceDescriptor {
                 backends: settings.backends,
                 flags: if cfg!(feature = "strict-assertions") {
                     wgpu::InstanceFlags::debugging()
                 } else {
                     wgpu::InstanceFlags::empty()
                 },
-                ..Default::default()
+                ..descriptor
             },
         )
         .await;
@@ -71,6 +102,7 @@ impl Compositor {
         if log::max_level() >= log::LevelFilter::Info {
             let available_adapters: Vec<_> = instance
                 .enumerate_adapters(settings.backends)
+                .await
                 .iter()
                 .map(wgpu::Adapter::get_info)
                 .collect();
@@ -86,6 +118,7 @@ impl Compositor {
                 .unwrap_or(wgpu::PowerPreference::HighPerformance),
             compatible_surface: compatible_surface.as_ref(),
             force_fallback_adapter: false,
+            apply_limit_buckets: false,
         };
 
         let adapter =
@@ -222,38 +255,39 @@ pub fn present(
     background_color: Color,
     on_pre_present: impl FnOnce(),
 ) -> Result<(), compositor::SurfaceError> {
-    match surface.get_current_texture() {
-        Ok(frame) => {
-            let view = &frame
-                .texture
-                .create_view(&wgpu::TextureViewDescriptor::default());
-
-            let _submission = renderer.present(
-                Some(background_color),
-                frame.texture.format(),
-                view,
-                viewport,
-            );
-
-            // Present the frame
-            on_pre_present();
-            frame.present();
-
-            Ok(())
+    let (frame, suboptimal) = match surface.get_current_texture() {
+        wgpu::CurrentSurfaceTexture::Success(frame) => (frame, false),
+        wgpu::CurrentSurfaceTexture::Suboptimal(frame) => (frame, true),
+        wgpu::CurrentSurfaceTexture::Timeout
+        | wgpu::CurrentSurfaceTexture::Occluded => {
+            return Err(compositor::SurfaceError::Timeout);
         }
-        Err(error) => match error {
-            wgpu::SurfaceError::Timeout => {
-                Err(compositor::SurfaceError::Timeout)
-            }
-            wgpu::SurfaceError::Outdated => {
-                Err(compositor::SurfaceError::Outdated)
-            }
-            wgpu::SurfaceError::Lost => Err(compositor::SurfaceError::Lost),
-            wgpu::SurfaceError::OutOfMemory => {
-                Err(compositor::SurfaceError::OutOfMemory)
-            }
-            wgpu::SurfaceError::Other => Err(compositor::SurfaceError::Other),
-        },
+        wgpu::CurrentSurfaceTexture::Outdated => {
+            return Err(compositor::SurfaceError::Outdated);
+        }
+        wgpu::CurrentSurfaceTexture::Lost => {
+            return Err(compositor::SurfaceError::Lost);
+        }
+        wgpu::CurrentSurfaceTexture::Validation => {
+            return Err(compositor::SurfaceError::Other);
+        }
+    };
+    let view = frame
+        .texture
+        .create_view(&wgpu::TextureViewDescriptor::default());
+    let _submission = renderer.present(
+        Some(background_color),
+        frame.texture.format(),
+        &view,
+        viewport,
+    );
+    on_pre_present();
+    renderer.engine.queue.present(frame);
+    // Present the acquired frame, then ask Iced to reconfigure before the next one.
+    if suboptimal {
+        Err(compositor::SurfaceError::Outdated)
+    } else {
+        Ok(())
     }
 }
 
@@ -334,6 +368,7 @@ impl graphics::Compositor for Compositor {
                 alpha_mode: self.alpha_mode,
                 view_formats: vec![],
                 desired_maximum_frame_latency: 1,
+                color_space: wgpu::SurfaceColorSpace::Auto,
             },
         );
     }

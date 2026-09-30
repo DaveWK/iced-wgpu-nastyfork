@@ -124,6 +124,7 @@ impl Renderer {
             // It would be great if the `StagingBelt` API exposed methods
             // for introspection to detect when a resize may be worth it.
             staging_belt: wgpu::util::StagingBelt::new(
+                engine.device.clone(),
                 buffer::MAX_WRITE_SIZE as u64,
             ),
 
@@ -284,7 +285,8 @@ impl Renderer {
             timeout: None,
         });
 
-        let mapped_buffer = slice.get_mapped_range();
+        let mapped_buffer =
+            slice.get_mapped_range().expect("mapped screenshot buffer");
 
         mapped_buffer.chunks(dimensions.padded_bytes_per_row).fold(
             vec![],
@@ -425,6 +427,7 @@ impl Renderer {
 
         let mut render_pass = ManuallyDrop::new(encoder.begin_render_pass(
             &wgpu::RenderPassDescriptor {
+                multiview_mask: None,
                 label: Some("iced_wgpu render pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                     view: frame,
@@ -511,6 +514,7 @@ impl Renderer {
 
                 render_pass = ManuallyDrop::new(encoder.begin_render_pass(
                     &wgpu::RenderPassDescriptor {
+                        multiview_mask: None,
                         label: Some("iced_wgpu render pass"),
                         color_attachments: &[Some(
                             wgpu::RenderPassColorAttachment {
@@ -604,6 +608,7 @@ impl Renderer {
 
                     render_pass = ManuallyDrop::new(encoder.begin_render_pass(
                         &wgpu::RenderPassDescriptor {
+                            multiview_mask: None,
                             label: Some("iced_wgpu render pass"),
                             color_attachments: &[Some(
                                 wgpu::RenderPassColorAttachment {
@@ -919,17 +924,18 @@ impl renderer::Headless for Renderer {
             return None;
         }
 
-        let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
+        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
             backends: wgpu::Backends::from_env()
                 .unwrap_or(wgpu::Backends::PRIMARY),
             flags: wgpu::InstanceFlags::empty(),
-            ..wgpu::InstanceDescriptor::default()
+            ..wgpu::InstanceDescriptor::new_without_display_handle()
         });
 
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
                 power_preference: wgpu::PowerPreference::HighPerformance,
                 force_fallback_adapter: false,
+                apply_limit_buckets: false,
                 compatible_surface: None,
             })
             .await
